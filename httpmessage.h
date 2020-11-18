@@ -1,9 +1,9 @@
 #ifndef HTTPMESSAGE_H
 #define HTTPMESSAGE_H
+#include <iostream>
 #include <vector>
 #include <string>
 #include <map>
-#include <fstream>
 #include <unistd.h>
 
 extern std::vector<std::string> methods;
@@ -40,14 +40,9 @@ class HTTPHeader{
 		std::string to_str();
 };
 
-class HTTPEntityBody{
-	public:
-		size_t length;
-		char * body;
-		
-		HTTPEntityBody();
-		void from_file(std::string path);
-		void calc_length(std::string path);
+struct HTTPEntityBody{
+	size_t length;
+	char * body;
 };
 
 

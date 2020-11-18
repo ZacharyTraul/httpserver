@@ -7,16 +7,15 @@
 #include <cstdlib>
 #include <unistd.h>
 #include <fstream>
-#include <vector>
-#include <map>
-#include <filesystem>
 #include <ctime>
-#include <sys/stat.h>
 #include <thread>
 #include <mutex>
 #include "httpmessage.h"
+#include "view.h"
 /* TODO: 
  * Start making some webpages
+ * 	Webpage class that everything can inherit from
+ * 		Factory Method Let's Go
  * 	Make "rendering" engine. i.e. I can just have a folder full of posts and
  * 	everything else in the blog "app" will fill in content based on that
  * A visitor counter would be pretty cool
@@ -31,9 +30,9 @@
  *			individualtemplate.html---------------------------------|Just nicely displays one post
  *			style.css
  *			posts/
- *				post1.html					|Format: <h3>title</h3>
- *				post2.html -------------------------------------+        <p>Short description</p>
- *				post3.html					|	 <p>body with <a>links</a> and images: <img/> or whatever</p>
+ *				post1.html
+ *				post2.html
+ *				post3.html
  *			media/
  *				post1pic.pic
  *				post2pic.pic
@@ -45,24 +44,11 @@
  */
 
 const int port = 55555;
-std::map<std::string, std::string> endings = {{".css", "text/css"}, {".js", "application/javascript"}, {".html", "text/html"},
-						   {".jpg", "image/jpeg"}, {".jpeg", "image/jpeg"}, {".png", "image/png"},
-						   {".gif", "image/gif"}, {".ico", "image/x-icon"}};
+
 std::mutex mtx;
 struct timeval tv;
 //Time in seconds.
 const int timeout = 15;
-
-std::string get_file_type(std::string path){
-	size_t period = path.find(".");
-	if(period == std::string::npos){
-	       	std::cout << "No Period" << std::endl;
-		return "NOTSUPPORTED";
-	}
-	std::string ending = path.substr(period);
-	if(endings.find(ending) != endings.end()) return endings[ending];
-	return "NOTSUPPORTED";
-}
 
 void log(HTTPMessage * request, HTTPMessage * response, int connection){
 	mtx.lock();
@@ -113,10 +99,8 @@ bool dispatch(std::string data, int connection){
 	HTTPMessage response("HTTP/1.1", "200", "OK");
 	response.header.fields["Connection"] = message.header.fields["Connection"];
 
-	if(message.request_line.uri == "/") message.request_line.uri = "/index/index.html";
-
 	//Decide what to do.
-	//We can't parse the request
+	//We can't parse the request.
 	if(!message.valid){
 		response.response_line.reassign("HTTP/1.1", "400", "Bad Request");
 		response.header.fields["Content-Length"] = "0";
@@ -127,71 +111,52 @@ bool dispatch(std::string data, int connection){
 		response.header.fields["Allow"] = "GET, HEAD";
 		response.header.fields["Content-Length"] = "0";
 	}
-	
 	//Version not supported
 	else if (message.request_line.version != "HTTP/1.1"){
 		response.response_line.reassign("HTTP/1.1", "505", "HTTP Version not supported");
 		response.header.fields["Content-Length"] = "0";
 	}
 	//Attempt to give them the file they asked for
-	else if (std::filesystem::exists("src" + message.request_line.uri) && std::filesystem::is_regular_file("src" + message.request_line.uri)){
-		//Check if what we intend to serve back is what was requested
-		bool acceptable = true;
-		//If there is an accept header
-		//This could probably be rewritten to be more efficient
-		if(message.header.fields.find("Accept") != message.header.fields.end()){
-			std::string mime_type = get_file_type(message.request_line.uri);
-			std::string accept = message.header.fields["Accept"];
-			//Most restrictive test to least restrictive
-			if(accept.find(mime_type) == std::string::npos){
-				//We couldn't find the type we intended to give back
-				response.response_line.reassign("HTTP/1.1", "406", "Not Acceptable");
-				acceptable = false;
-			}
-			//But maybe it had wildcards
-			size_t slash = mime_type.find("/");
-			if(slash == std::string::npos || slash == 0) std::cout << "ERROR SLASH" << std::endl;
-			if(accept.find(mime_type.substr(0, slash + 1) + "*") != std::string::npos){
-				response.response_line.reassign("HTTP/1.1", "200", "OK");
-				acceptable = true;
-			}
-			//Maybe it really had wildcards
-			else if(accept.find("*/*") != std::string::npos){
-				response.response_line.reassign("HTTP/1.1", "200", "OK");
-				acceptable = true;
-			}
-		}
-		
-		//We are all good to proceed
-		if(acceptable){
-			//We don't do accept-ranges yet.
-			if(message.header.fields.find("Accept-Ranges") != message.header.fields.end()){
-			       	response.header.fields["Accept-Ranges"] = "none";
-			}
-			//Set the content-type
-			response.header.fields["Content-Type"] = get_file_type(message.request_line.uri);
-			//Set the Last-Modified header
-			struct stat fileInfo;
-		        stat(("src" + message.request_line.uri).c_str(), &fileInfo);
-       		 	time_t mod;
-       			struct tm * timeinfo;
-		        char buffer[30];
-			//std::cout << fileInfo.st_ctime;
-       			timeinfo = gmtime(&fileInfo.st_ctime);
-			strftime(buffer, sizeof(buffer), "%a, %d %b %G %T GMT", timeinfo);
-			response.header.fields["Last-Modified"] = std::string(buffer);
-			
-			//If the request was HEAD, we don't actually want to load the file into memory, only get its size
-			if(message.request_line.method == "HEAD") response.entity_body.calc_length("src" + message.request_line.uri);
-			else response.entity_body.from_file("src" + message.request_line.uri);
-			response.header.fields["Content-Length"] = std::to_string(response.entity_body.length);
-		}
-	} 
-	//We couldn't find the file 
 	else {
-		response.response_line.reassign("HTTP/1.1", "404", "Not Found");
-		response.header.fields["Content-Length"] = "0";
-	}
+		//Generate the file
+		View * view;
+		view = View::Create(message.request_line.uri);
+		entity_data entity = view->generate();
+		//404 if there was nothing to serve back.
+		if(!entity.notfound){
+			response.entity_body.body = entity.asset;
+			response.entity_body.length = entity.length;
+			std::string mime = entity.mime_type;
+			
+			//Check if acceptable
+			bool acceptable = false;
+			if(!message.header.fields["Accept"].empty()){
+				std::string accept = message.header.fields["Accept"];
+				if(accept.find("*/*") != std::string::npos) acceptable = true; //Wildcard
+				else if(accept.find(mime.substr(0, mime.find("/")) + "/*") != std::string::npos) acceptable = true; //Partial Wildcard
+				else if(accept.find(mime) != std::string::npos) acceptable = true; //Matches exactly
+			} else acceptable = true;
+
+			//It is
+			if(acceptable){
+				if(!message.header.fields["Accept-Ranges"].empty())
+					response.header.fields["Accept-Ranges"] = "none"; //Accept-Ranges not yet implemented.
+				response.header.fields["Content-Type"] = mime; //Set Content-Type
+				response.header.fields["Last-Modified"] = entity.last_modified; //Set Last-Modified
+				response.header.fields["Content-Length"] = std::to_string(entity.length); //Set Content-Length
+			} else {
+				response.response_line.reassign("HTTP/1.1", "406", "Not Acceptable");
+
+			}
+		//It was not found.
+		} else {
+			response.response_line.reassign("HTTP/1.1", "404", "Not Found");
+			response.header.fields["Content-Length"] = "0";
+
+		}
+		delete view;
+	} 
+	
 	//Respond to it
 	if(message.request_line.method == "GET") response.write_message(connection, "GET");
 	else response.write_message(connection, "HEAD");
@@ -222,8 +187,7 @@ std::string read_request(int connection){
 		const size_t bufsize = 8000;
 		char buffer[bufsize];
 		if(read(connection, buffer, bufsize) < 0){
-			//This is probaby a bad way to handle the error. 
-			//Connection reset by peer
+			//Connection reset by peer. Probably a better way to handle this.
 			if(errno = 104){
 				std::cout << "ERROR CLOSED" << std::endl;
 				return "CLOSED";

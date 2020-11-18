@@ -119,28 +119,6 @@ std::string HTTPHeader::to_str(){
 	return out;
 }
 
-//Constructor for HTTPEntityBody
-HTTPEntityBody::HTTPEntityBody(){length = 0;}
-//Loads the file at path into body and the size into length 
-void HTTPEntityBody::from_file(std::string path){
-	std::ifstream file(path, std::ios::in|std::ios::binary|std::ios::ate);
-	if(file.is_open()){
-		length = file.tellg();
-		body = new char [length];
-		file.seekg(0, std::ios::beg);
-		file.read(body, length);
-		file.close();
-	} 
-}
-//Loads the size of the file at path into length.
-void HTTPEntityBody::calc_length(std::string path){
-	std::ifstream file(path, std::ios::in|std::ios::binary|std::ios::ate);
-	if(file.is_open()){
-		length = file.tellg();
-		file.close();
-	}
-}
-
 //HTTPMessage Constructors
 //When we are crafting a response
 HTTPMessage::HTTPMessage(std::string version, std::string status_code, std::string reason_phrase){
