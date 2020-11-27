@@ -12,12 +12,10 @@
 #include <mutex>
 #include "httpmessage.h"
 #include "view.h"
+
 /* TODO: 
+ * Hook the template system up to the view system.
  * Start making some webpages
- * 	Webpage class that everything can inherit from
- * 		Factory Method Let's Go
- * 	Make "rendering" engine. i.e. I can just have a folder full of posts and
- * 	everything else in the blog "app" will fill in content based on that
  * A visitor counter would be pretty cool
  * Pages
  * 	Main landing page

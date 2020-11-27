@@ -7,6 +7,7 @@
 #include <sys/stat.h>//Getting modify times of files.
 #include <ctime>     //Working with times
 #include <map>	     //For maps.
+#include "htmltemplate.h" //For templates
 
 extern std::map<std::string, std::string> end_to_mime;
 
@@ -27,7 +28,7 @@ class View {
 	protected:
 		std::string uri;
 		static binary_file_data get_binary_file(std::string path);
-		std::string get_text_file(std::string path);
+		static std::string get_text_file(std::string path);
 		static std::string mime_from_path(std::string path);
 		static std::string last_modified_from_path(std::string path);
 	public:
@@ -40,4 +41,11 @@ class Simple: public View {
 		entity_data generate();
 		Simple(std::string u);
 };
+
+class Main: public View {
+	public:
+		entity_data generate();
+		Main(std::string u);
+};
+
 #endif

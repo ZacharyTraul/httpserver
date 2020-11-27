@@ -64,7 +64,11 @@ std::string View::last_modified_from_path(std::string path){
 
 //Takes the uri and decides what view the uri goes with. 
 View* View::Create(std::string u){
-	return new Simple(u);	
+//	if(u.find("/blog") == 0) return new Blog(u);
+	std::cout << u << std::endl;
+	if(u == "/") return new Main(u);
+	else return new Simple(u);	
+
 	/*
 	if     (u.find("/index")   == 0)	return new Main(u);
 	else if(u.find("/blog")    == 0) 	return new Blog(u);
@@ -83,7 +87,7 @@ Simple::Simple(std::string u){
 //For now just returns the requested asset.
 entity_data Simple::generate(){
 	entity_data output;
-	binary_file_data bin_data = get_binary_file("src" + uri);
+	binary_file_data bin_data = View::get_binary_file("src" + uri);
 	if(bin_data.length){
 		output.asset = bin_data.data; 
 		output.length = bin_data.length; 
@@ -92,5 +96,22 @@ entity_data Simple::generate(){
 		return output; 
 	}
 	output.notfound = true;
+	return output;
+}
+//############################################################################
+//Main Page
+Main::Main(std::string u){
+	uri = u;
+}
+
+entity_data Main::generate(){
+	entity_data output;
+	template_args vars;
+	vars.import_vars["content"] = "src/index/main_contents";
+	HTMLTemplate temp;
+	output.asset = temp.process_template("src/index/index.html", vars);
+	output.length = temp.length;
+	output.mime_type = "text/html";
+	output.last_modified = View::last_modified_from_path("src/index/index.html");
 	return output;
 }
