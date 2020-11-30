@@ -22,7 +22,7 @@ class HTMLTemplate{
 		static std::string handle_conds(std::string input, std::map<std::string, bool> cond_vars, size_t start, size_t end);
 		static std::string handle_loops(std::string input, std::map<std::string, std::vector<std::string>> loop_vars, size_t start, size_t end);
 	public:
-		char * process_template(std::string path, template_args args);
+		std::vector<char> process_template(std::string path, template_args args);
 		size_t length;
 };
 #endif

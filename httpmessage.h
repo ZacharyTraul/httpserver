@@ -4,7 +4,8 @@
 #include <vector>
 #include <string>
 #include <map>
-#include <unistd.h>
+#include <sys/types.h>
+#include <sys/socket.h>
 
 extern std::vector<std::string> methods;
 extern std::vector<std::string> field_strings;
@@ -40,18 +41,12 @@ class HTTPHeader{
 		std::string to_str();
 };
 
-struct HTTPEntityBody{
-	size_t length;
-	char * body;
-};
-
-
 class HTTPMessage{
 	public:
 		HTTPResponseLine response_line;
 		HTTPRequestLine request_line;
 		HTTPHeader header;
-		HTTPEntityBody entity_body;
+		std::vector<char> entity_body;
 		bool valid;
 		size_t length;
 

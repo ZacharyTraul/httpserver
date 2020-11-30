@@ -8,40 +8,23 @@
 #include <unistd.h>
 #include <fstream>
 #include <ctime>
+#include <time.h>
 #include <thread>
 #include <mutex>
 #include "httpmessage.h"
 #include "view.h"
 
 /* TODO: 
- * Hook the template system up to the view system.
- * Start making some webpages
- * A visitor counter would be pretty cool
- * Pages
- * 	Main landing page
- * 	Blog Page
- * 		Main Page: Title and short description of each post, tiled. Option to sort by category, date, or search by name (filter based)
- * 		Individual Posts: Title description and body (can include pictures, links, etc)
- * 		File structure:
- *		/blog
- *			maintemplate.html---------------------------------------|Vertical list of all posts
- *			individualtemplate.html---------------------------------|Just nicely displays one post
- *			style.css
- *			posts/
- *				post1.html
- *				post2.html
- *				post3.html
- *			media/
- *				post1pic.pic
- *				post2pic.pic
- *
- * 	About/Contact
- * 	Cycling Project
- * 	Utilities/Games/Whatever else
+ * Make caching a thing.
+ * Home Page
+ * Blog
+ * Utilities/Games/Whatever else
  * Get domain.
  */
 
 const int port = 55555;
+std::map<std::string, std::string> etags;
+std::map<std::string, std::string> modified;
 
 std::mutex mtx;
 struct timeval tv;
@@ -114,6 +97,13 @@ bool dispatch(std::string data, int connection){
 		response.response_line.reassign("HTTP/1.1", "505", "HTTP Version not supported");
 		response.header.fields["Content-Length"] = "0";
 	}
+	//If the etags match
+	else if(!message.header.fields["If-None-Match"].empty() && etags[message.request_line.uri] == message.header.fields["If-None-Match"]){
+		response.response_line.reassign("HTTP/1.1", "304", "Not Modified");
+		response.header.fields["Content-Length"] = "0";
+		response.header.fields["ETag"] = etags[message.request_line.uri];
+		response.header.fields["Last-Modified"] = modified[message.request_line.uri];
+	}
 	//Attempt to give them the file they asked for
 	else {
 		//Generate the file
@@ -122,8 +112,14 @@ bool dispatch(std::string data, int connection){
 		entity_data entity = view->generate();
 		//404 if there was nothing to serve back.
 		if(!entity.notfound){
-			response.entity_body.body = entity.asset;
-			response.entity_body.length = entity.length;
+			//Etag and Caching stuff
+			etags[message.request_line.uri] = entity.etag;
+			response.header.fields["ETag"] = entity.etag;
+			response.header.fields["Cache-Control"] = entity.cache_control;
+			modified[message.request_line.uri] = entity.last_modified;
+
+			//Set the body and mime type
+			response.entity_body = entity.asset;
 			std::string mime = entity.mime_type;
 			
 			//Check if acceptable
@@ -141,7 +137,7 @@ bool dispatch(std::string data, int connection){
 					response.header.fields["Accept-Ranges"] = "none"; //Accept-Ranges not yet implemented.
 				response.header.fields["Content-Type"] = mime; //Set Content-Type
 				response.header.fields["Last-Modified"] = entity.last_modified; //Set Last-Modified
-				response.header.fields["Content-Length"] = std::to_string(entity.length); //Set Content-Length
+				response.header.fields["Content-Length"] = std::to_string(entity.asset.size()); //Set Content-Length
 			} else {
 				response.response_line.reassign("HTTP/1.1", "406", "Not Acceptable");
 
@@ -150,11 +146,9 @@ bool dispatch(std::string data, int connection){
 		} else {
 			response.response_line.reassign("HTTP/1.1", "404", "Not Found");
 			response.header.fields["Content-Length"] = "0";
-
 		}
 		delete view;
 	} 
-	
 	//Respond to it
 	if(message.request_line.method == "GET") response.write_message(connection, "GET");
 	else response.write_message(connection, "HEAD");
@@ -187,7 +181,6 @@ std::string read_request(int connection){
 		if(read(connection, buffer, bufsize) < 0){
 			//Connection reset by peer. Probably a better way to handle this.
 			if(errno = 104){
-				std::cout << "ERROR CLOSED" << std::endl;
 				return "CLOSED";
 			}
 			std::cout << "Error reading from connection: " << errno << std::endl;

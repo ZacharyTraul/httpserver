@@ -17,11 +17,11 @@ std::string HTMLTemplate::str_from_file(std::string path){
 //Returns a string containing the fully processed template
 //Takes in the path of the template and the arguments for that template.
 //If there is no file at path returns empty string.
-char * HTMLTemplate::process_template(std::string path, template_args args){
+std::vector<char> HTMLTemplate::process_template(std::string path, template_args args){
 	std::string temp = str_from_file(path);
-
 	//There was no file to grab.
-	if(temp.empty()) return nullptr;
+	std::vector<char> output;
+	if(temp.empty()) return output; 
 	
 	//Recursively do imports.
 	std::string import_token = "{{IMPORT ";
@@ -66,11 +66,6 @@ char * HTMLTemplate::process_template(std::string path, template_args args){
 			}
 			//Update the parse_pos. Can't set it to next_block because we would just find the block repeatedly.
 			parse_pos = next_block + 1;
-			//If we couldn't find either of them that means there is an unclosed block.
-			std::string error_message = "Error Creating Page";
-			char * error = new char[error_message.length()];
-			length = error_message.length();
-			if(next_block == std::string::npos) return error;		
 			//If it is a start block, increase the level by one.
 			if(start_block) level++;
 			//If it is an end block, decrease the level by one.
@@ -83,10 +78,8 @@ char * HTMLTemplate::process_template(std::string path, template_args args){
 			temp = handle_loops(temp, args.loop_vars, block_start, block_end);
 		}
 	}
-	char * output = new char[temp.length()];
-	strcpy(output, temp.c_str());
-	length = temp.length();
-	return output;
+	output = std::vector<char>(temp.begin(), temp.end());
+	return output; 
 }
 
 //Returns a string containing the template after all replace_vars have been replaced.
@@ -252,7 +245,6 @@ std::string HTMLTemplate::handle_loops(std::string input, std::map<std::string, 
 		//Prepare the content
 		std::string temp_content = content;
 		for(std::string var: vars){
-			std::cout << var << std::endl;
 			size_t rep_loc = temp_content.find("{{" + var + "}}"); 
 			if(rep_loc != std::string::npos){
 				temp_content.erase(rep_loc, 4 + var.length()); 

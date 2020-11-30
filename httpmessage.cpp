@@ -20,7 +20,7 @@ HTTPResponseLine::HTTPResponseLine(){}
 void HTTPResponseLine::reassign(std::string v, std::string s, std::string r){
 	version = v;
 	status_code = s;
-	reason_phrase = s;
+	reason_phrase = r;
 }
 //Returns a valid HTTP/1.0 response line as a string
 std::string HTTPResponseLine::to_str(){
@@ -67,7 +67,7 @@ HTTPRequestLine::HTTPRequestLine(std::string request){
 		} else valid = false;
 	}
 }
-//Returns a valid HTTP/1.0 request line as a string
+//Returns a valid HTTP/1.1 request line as a string
 std::string HTTPRequestLine::to_str(){
 	return method + " " + uri + " " + version + "\r\n";
 }
@@ -82,7 +82,6 @@ HTTPHeader::HTTPHeader(){
 	timeinfo = gmtime(&now);
 	strftime(buffer, sizeof(buffer), "%a, %d %b %G %T GMT", timeinfo);
 	fields["Date"] = std::string(buffer); 
-	fields["Expires"] = fields["Date"];
 	//Server Version
 	fields["Server"] = "Zach Traul's HTTP Server v1.0";
 	//Caching stuff
@@ -108,7 +107,7 @@ HTTPHeader::HTTPHeader(std::string header){
 		}
 	}	
 }	
-//Returns a valid HTTP/1.0 header as a string
+//Returns a valid HTTP/1.1 header as a string
 std::string HTTPHeader::to_str(){
 	std::string out;
 	for(auto const& field: fields){
@@ -143,14 +142,13 @@ void HTTPMessage::write_message(int connection, std::string method){
 	//So we can log() it
 	length = response_line.to_str().length() + header.to_str().length();
 	//Write
-	write(connection, response_line.to_str().c_str(), response_line.to_str().length());
-	write(connection, header.to_str().c_str(), header.to_str().length());
+	send(connection, response_line.to_str().c_str(), response_line.to_str().length(), MSG_NOSIGNAL);
+	send(connection, header.to_str().c_str(), header.to_str().length(), MSG_NOSIGNAL);
 	//Only transfer a message body if there is data to be sent and the method is GET 
-	if(entity_body.length > 0 && method == "GET"){
-		write(connection, entity_body.body, entity_body.length);
-		delete[] entity_body.body;
+	if(entity_body.size() > 0 && method == "GET"){
+		send(connection, &entity_body[0], entity_body.size(), MSG_NOSIGNAL);
 		//Again, for log()
-		length += entity_body.length;
+		length += entity_body.size();
 	}
 }
 
